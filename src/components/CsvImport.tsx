@@ -6,7 +6,7 @@ import { buildCsvWords, createCsvTemplate, parseCsvText, type CsvPreview } from 
 import { useToast } from '../lib/toastContext';
 import { wordKey } from '../lib/wordData';
 
-type ImportResult = { added: number; duplicates: number; invalid: number; importedAt: string };
+type ImportResult = { added: number; duplicates: number; invalid: number; importedAt: string; groupId: string; groupName: string };
 
 const STATUS_LABELS = {
   ready: '可导入',
@@ -34,6 +34,7 @@ export default function CsvImport() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [groupName, setGroupName] = useState('我的词汇');
 
   const chooseFile = async (file?: File) => {
     if (!file) return;
@@ -53,8 +54,10 @@ export default function CsvImport() {
     setBusy(true);
     setError('');
     const importedAt = new Date().toISOString();
+    const targetGroupName = groupName.trim() || '我的词汇';
     let added = 0;
     let runtimeDuplicates = 0;
+    let targetGroupId = '';
     try {
       await db.transaction('rw', db.words, db.groups, async () => {
         const existingKeys = new Set((await db.words.toArray()).map(word => wordKey(word.word)));
@@ -68,11 +71,12 @@ export default function CsvImport() {
         if (rows.length === 0) return;
 
         const groups = await db.groups.toArray();
-        let group = groups.find(item => item.name === '我的词汇');
+        let group = groups.find(item => item.name.trim() === targetGroupName);
         if (!group) {
-          group = { id: crypto.randomUUID(), name: '我的词汇', createdAt: importedAt };
+          group = { id: crypto.randomUUID(), name: targetGroupName, createdAt: importedAt };
           await db.groups.add(group);
         }
+        targetGroupId = group.id;
         const words = buildCsvWords(rows, group.id, importedAt);
         await db.words.bulkAdd(words);
         added = words.length;
@@ -82,7 +86,9 @@ export default function CsvImport() {
         added,
         duplicates: preview.duplicateCount + runtimeDuplicates,
         invalid: preview.invalidCount,
-        importedAt
+        importedAt,
+        groupId: targetGroupId,
+        groupName: targetGroupName
       };
       setPreview(null);
       setResult(completed);
@@ -127,10 +133,11 @@ export default function CsvImport() {
       <div className="csv-table-wrap"><table className="csv-table"><thead><tr><th>单词</th><th>音标</th><th>词性</th><th>释义</th><th>例句</th><th>状态</th></tr></thead><tbody>
         {preview.rows.slice(0, 20).map(row => <tr key={row.rowNumber}><td><strong>{row.word || `第 ${row.rowNumber} 行`}</strong></td><td>{row.ipaUK || row.ipaUS || '—'}</td><td>{row.partOfSpeech || '—'}</td><td>{row.meaning || '—'}</td><td>{row.examples.length}</td><td><span className={`csv-status csv-status-${row.status}`}>{STATUS_LABELS[row.status]}</span>{row.issues.length ? <small>{row.issues.join('、')}</small> : null}</td></tr>)}
       </tbody></table></div>
-      <div className="csv-confirm"><p>将新增 <strong>{preview.importableCount}</strong> 个单词。整个批次在一个 Dexie transaction 中写入。</p><button type="button" className="book-button book-button-primary" disabled={busy || preview.importableCount === 0} onClick={() => void confirmImport()}>{busy ? '正在导入…' : '确认导入'}</button></div>
+      <div className="csv-group-field"><label htmlFor="csv-group-name">导入到分组</label><input id="csv-group-name" value={groupName} onChange={event => setGroupName(event.target.value)} maxLength={80} placeholder="例如：矿业专业" /><small>填写已有分组名称会复用该分组；填写新名称会在导入时创建。</small></div>
+      <div className="csv-confirm"><p>将新增 <strong>{preview.importableCount}</strong> 个单词到“{groupName.trim() || '我的词汇'}”。整个批次在一个 Dexie transaction 中写入。</p><button type="button" className="book-button book-button-primary" disabled={busy || preview.importableCount === 0} onClick={() => void confirmImport()}>{busy ? '正在导入…' : '确认导入'}</button></div>
     </div> : null}
 
-    {result ? <div className="csv-result" role="status"><div><strong>CSV 导入完成</strong><p>成功导入 {result.added} 个单词 · 跳过 {result.duplicates} 个重复词 · 忽略 {result.invalid} 个无效词条</p></div><button type="button" className="book-button book-button-primary" onClick={() => navigate(`/words?importedAt=${encodeURIComponent(result.importedAt)}`)}>查看刚导入的单词</button></div> : null}
+    {result ? <div className="csv-result" role="status"><div><strong>CSV 导入完成</strong><p>已加入“{result.groupName}”：成功导入 {result.added} 个单词 · 跳过 {result.duplicates} 个重复词 · 忽略 {result.invalid} 个无效词条</p></div><button type="button" className="book-button book-button-primary" onClick={() => navigate(`/words?groupId=${encodeURIComponent(result.groupId)}&importedAt=${encodeURIComponent(result.importedAt)}`)}>查看刚导入的单词</button></div> : null}
   </section>;
 }
 

@@ -160,6 +160,11 @@
 .csv-status-incomplete { background: var(--accent-soft); color: var(--accent-text); }
 .csv-confirm, .csv-result { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
 .csv-confirm p, .csv-result p { margin: 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.55; }
+.csv-group-field { display: grid; gap: 0.45rem; margin-top: 1rem; }
+.csv-group-field label { color: var(--text-strong); font-size: 0.84rem; font-weight: 750; }
+.csv-group-field input { width: min(100%, 28rem); border: 1px solid var(--line-strong); border-radius: 0.65rem; background: var(--surface); color: var(--text-strong); padding: 0.7rem 0.8rem; font: inherit; }
+.csv-group-field input:focus { border-color: var(--accent); outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent); }
+.csv-group-field small { color: var(--text-muted); }
 .csv-result { padding: 1rem; border-radius: 0.55rem; background: var(--success-bg); }
 .csv-result strong { color: var(--success); }
 .data-quality-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
