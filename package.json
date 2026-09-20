@@ -2,7 +2,7 @@
   "name": "lexuni-app",
   "private": true,
   "version": "1.0.0",
-  "description": "A local-first English-Turkish vocabulary trainer.",
+  "description": "A local-first personal English-Chinese wordbook.",
   "author": "Hamza Bektaş",
   "license": "MIT",
   "repository": {

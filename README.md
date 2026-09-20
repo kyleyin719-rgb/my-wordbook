@@ -1,110 +1,39 @@
-# Lexuni
+# 我的词书 · Lexuni
 
-**Lexuni is a local-first vocabulary trainer for learning the English words you actually care about.**
+基于 [Lexuni](https://github.com/bektasing/lexuni) 改造的本地优先个人英汉词书。保留 React、TypeScript、Vite、Dexie / IndexedDB 和 PWA；无需账号或后端。
 
-## Overview
+## 目前功能
 
-Traditional language apps often spend time on words you already know. Lexuni lets you import your own English–Turkish vocabulary and practice only that personal vocabulary pool. It runs entirely in the browser and requires no account or backend.
+- 全部单词、重点单词与最近添加视图；覆盖音标、释义、例句和笔记的实时搜索；最近添加、A–Z、Z–A、重点优先排序。
+- 添加、编辑、删除词条；保存英美音标、词性、中文释义、例句、笔记和重点标记。
+- 详情页用浏览器 Web Speech API 朗读英音、美音和英文例句，不请求收费 API，也不保存音频文件。可用音色取决于浏览器和设备。
+- 保留按分组导入的文本词表；支持带验证预览的词书 JSON 合并导入与完整导出，也保留原版 Lexuni 完整备份的导出和恢复。
+- 本地 IndexedDB 持久化、响应式界面和 PWA 安装能力。
 
-## Screenshots
+原版练习、答题、统计与历史页面已从导航中隐藏。现有练习记录及对应数据表暂时保留，以便安全兼容旧备份。
 
-<p align="center">
-  <img src="docs/screenshots/practice-arctic.png" alt="Lexuni Practice screen in the Arctic theme" width="49%">
-  <img src="docs/screenshots/practice-midnight.png" alt="Lexuni Practice screen in the Midnight theme" width="49%">
-</p>
-<p align="center"><sub>Practice — Arctic and Midnight</sub></p>
+## 运行
 
-<p align="center">
-  <img src="docs/screenshots/vocabulary-midnight.png" alt="Lexuni vocabulary groups in the Midnight theme" width="49%">
-  <img src="docs/screenshots/import-preview-midnight.png" alt="Lexuni vocabulary import preview in the Midnight theme" width="49%">
-</p>
-<p align="center"><sub>Vocabulary library and import preview</sub></p>
-
-## Features
-
-- Import custom vocabulary with a simple, human-readable text format.
-- Keep import batches organized as groups, with rename and merge tools.
-- Practice a single group or the complete **All Words** pool.
-- Alternate between English → Turkish and Turkish → English questions.
-- Answer four-choice questions with immediate correction and later reinforcement.
-- Get balanced coverage through a shuffle-bag question queue.
-- Resume unfinished study sessions after navigation or reloads.
-- Review session history, mistakes, and per-word statistics.
-- Choose from six themes, led by Arctic and Midnight.
-- Store vocabulary and progress locally in IndexedDB.
-- Export and restore a full local JSON backup.
-- Install Lexuni as a Progressive Web App (PWA).
-
-## Import Format
-
-```text
-# Google Cloud
-
-deploy = yayına almak
-reliable = güvenilir
-credential = kimlik bilgisi
-```
-
-A line beginning with `#` names the import group. Each vocabulary entry uses `english = Turkish`; `:` and `-` are also accepted as separators.
-
-## Local-first Privacy
-
-Lexuni stores vocabulary, groups, sessions, and history in IndexedDB on your device. No account or backend is required for core use, and vocabulary is not automatically uploaded to a server. Backup and export actions are initiated and controlled by you.
-
-Because browser storage can be cleared, export a full backup periodically if your vocabulary matters to you.
-
-## Tech Stack
-
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS
-- Dexie / IndexedDB
-- `vite-plugin-pwa`
-
-## Getting Started
-
-Node.js 22.12 or newer is required. Node 24 is used for development and CI.
+需要 Node.js 22.12 或更新版本。
 
 ```bash
-git clone https://github.com/bektasing/lexuni.git
-cd lexuni
 npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite.
-
-## Quality Checks
+质量检查：
 
 ```bash
 npm run lint
 npm run build
 ```
 
-To preview the production build locally:
+## 导入与备份
 
-```bash
-npm run preview
-```
+文本导入每行使用 `英文 = 中文释义`，可用 `# 分组名称` 命名该批词汇。词书 JSON 导入会跳过重复英文词，不替换现有词条。完整备份恢复会替换本浏览器中现有的数据，因此请先导出备份。
 
-## Project Structure
+数据保存在当前浏览器的 IndexedDB 中。浏览器数据被清除时词书也会丢失，请定期导出 JSON。
 
-- `src/components/` — shared navigation, modal, and confirmation UI
-- `src/pages/` — application screens and practice flow
-- `src/db/` — Dexie database definition and migrations
-- `src/lib/` — theme and practice-feedback helpers
-- `src/types/` — persisted data types
-- `public/` — PWA assets
+## 开源许可
 
-## Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and data-safety expectations.
-
-## Developer
-
-Created by [Hamza Bektaş](https://hamzabektas.xyz).
-
-## License
-
-Lexuni is available under the [MIT License](LICENSE).
+原项目由 Hamza Bektaş 开发，采用 [MIT License](LICENSE)。保留原项目许可与版权声明。

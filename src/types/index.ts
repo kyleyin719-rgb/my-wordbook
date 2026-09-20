@@ -4,9 +4,25 @@ export type WordGroup = {
   createdAt: string;
 };
 
+export interface Example {
+  id: string;
+  en: string;
+  zh: string;
+}
+
 export type Word = {
   id: string;
   groupId: string;
+  word: string;
+  ipaUK: string;
+  ipaUS: string;
+  partOfSpeech: string;
+  meaning: string;
+  examples: Example[];
+  note: string;
+  starred: boolean;
+  updatedAt: string;
+  // Keep legacy fields while old practice records and backups still exist.
   english: string;
   turkish: string;
   createdAt: string;

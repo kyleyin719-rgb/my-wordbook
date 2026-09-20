@@ -11,6 +11,7 @@ type ModalProps = {
   footer?: ReactNode;
   dismissible?: boolean;
   closeLabel?: string;
+  dialogClassName?: string;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -45,7 +46,8 @@ export default function Modal({
   children,
   footer,
   dismissible = true,
-  closeLabel = 'Close dialog'
+  closeLabel = 'Close dialog',
+  dialogClassName = ''
 }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -149,7 +151,7 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="modal-dialog"
+        className={`modal-dialog ${dialogClassName}`}
         onPointerDown={(event) => event.stopPropagation()}
       >
         <header className="modal-header">

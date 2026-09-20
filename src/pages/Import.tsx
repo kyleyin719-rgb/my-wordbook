@@ -3,6 +3,7 @@ import { db } from '../db/db';
 import { Import as ImportIcon, Sparkles, Copy, CheckCircle2, AlertCircle, Info, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
+import { normalizeWordRecord } from '../lib/wordData';
 
 type ParsedWord = {
   english: string;
@@ -27,7 +28,7 @@ export default function ImportPage() {
     const rawLines = input.split('\n').map(l => l.trim()).filter(l => l);
     const headerLine = rawLines.find(l => l.startsWith('#'));
     
-    let parsedGroupName = `Imported Words - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    let parsedGroupName = `导入词汇 - ${new Date().toLocaleDateString('zh-CN')}`;
     if (headerLine) {
       const cleanHeader = headerLine.replace(/^#+/, '').trim();
       if (cleanHeader) parsedGroupName = cleanHeader;
@@ -79,21 +80,13 @@ export default function ImportPage() {
     if (validWords.length === 0) return;
 
     const groupId = crypto.randomUUID();
-    const safeGroupName = groupName.trim() || 'Imported Words';
+    const safeGroupName = groupName.trim() || '导入词汇';
     setIsImporting(true);
     setImportError(null);
 
     try {
       const createdAt = new Date().toISOString();
-      const newEntries = validWords.map(w => ({
-        id: crypto.randomUUID(),
-        groupId,
-        english: w.english,
-        turkish: w.turkish,
-        createdAt,
-        correctCount: 0,
-        wrongCount: 0
-      }));
+      const newEntries = validWords.map(w => normalizeWordRecord({ word: w.english, meaning: w.turkish, createdAt }, groupId));
 
       await db.transaction('rw', db.groups, db.words, async () => {
         await db.groups.add({ id: groupId, name: safeGroupName, createdAt });
@@ -112,7 +105,7 @@ export default function ImportPage() {
       setImportSuccess(result);
     } catch {
       setImportSuccess(null);
-      setImportError('The words could not be imported. Your existing vocabulary was not changed. Please try again.');
+      setImportError('导入失败，已有词汇未被修改，请重试。');
     } finally {
       setIsImporting(false);
     }
@@ -127,27 +120,22 @@ export default function ImportPage() {
   };
 
   const copyPrompt = () => {
-    const prompt = `Extract useful English vocabulary from the provided image or text and translate it naturally into Turkish.
+    const prompt = `请从提供的图片或文本中提取值得学习的英语词汇，并给出自然、简洁的中文释义。
 
-Return ONLY in this format:
+只按以下格式输出：
 
-# List Name
+# 词单名称
 
-english word = Turkish meaning
-english word = Turkish meaning
-english word = Turkish meaning
+english word = 中文释义
+english word = 中文释义
+english word = 中文释义
 
-Rules:
-* One English word or useful phrase per line.
-* Use = between English and Turkish.
-* Do not use numbering.
-* Do not use bullets.
-* Do not add explanations.
-* Do not use Markdown code blocks.
-* Keep Turkish meanings short and natural.
-* Avoid duplicates.
-* Ignore extremely basic English words unless they are important in context.
-* If a word has multiple common meanings, separate them using /.`;
+规则：
+* 每行一个英语单词或常用短语。
+* 英文与中文之间使用 = 分隔。
+* 不要编号、项目符号、解释或 Markdown 代码块。
+* 中文释义保持简短自然，多个常见释义用 / 分隔。
+* 避免重复。`;
     
     navigator.clipboard.writeText(prompt);
     setCopied(true);
@@ -164,21 +152,21 @@ Rules:
         <button 
           onClick={() => navigate('/words')}
           className="icon-button -ml-2"
-          aria-label="Back to vocabulary"
+          aria-label="返回词库"
         >
           <ChevronLeft size={24} />
         </button>
         <div>
-          <span className="eyebrow">Add to your library</span>
-          <h1>Import Vocabulary</h1>
-          <p>Paste words or use the AI helper.</p>
+          <span className="eyebrow">添加到词库</span>
+          <h1>导入词汇</h1>
+          <p>粘贴词表，预览后导入。</p>
         </div>
       </header>
 
       <section className="import-workspace">
         <div className="import-label">
-          <label htmlFor="vocabulary-import">Vocabulary list</label>
-          <code>word = meaning</code>
+          <label htmlFor="vocabulary-import">词汇列表</label>
+          <code>英文 = 中文</code>
         </div>
         <textarea
           id="vocabulary-import"
@@ -187,7 +175,7 @@ Rules:
             setInput(e.target.value);
             if (preview) setPreview(null);
           }}
-          placeholder={"# Chapter 1\n\nreliable = güvenilir\ndeploy = yayına almak\nretrieve = geri almak"}
+          placeholder={"# 第一单元\n\nreliable = 可靠的\ndeploy = 部署\nretrieve = 取回"}
           className="field import-textarea"
         ></textarea>
         
@@ -197,24 +185,24 @@ Rules:
           className="button import-preview-button"
         >
           <ImportIcon size={20} />
-          <span>Preview Import</span>
+          <span>预览导入</span>
         </button>
       </section>
 
       {preview && (
         <section className="import-preview">
-          <h3>Import Preview</h3>
-          <p>Group: <strong>{groupName}</strong></p>
+          <h3>导入预览</h3>
+          <p>分组：<strong>{groupName}</strong></p>
           
           <div className="preview-stats">
             <div className="text-success-tx">
-              <strong>{validCount}</strong><span>new</span>
+              <strong>{validCount}</strong><span>新增</span>
             </div>
             <div className="text-warning-tx">
-              <strong>{duplicateCount}</strong><span>duplicates</span>
+              <strong>{duplicateCount}</strong><span>重复</span>
             </div>
             <div className="text-danger-tx">
-              <strong>{invalidCount}</strong><span>invalid</span>
+              <strong>{invalidCount}</strong><span>格式错误</span>
             </div>
           </div>
 
@@ -235,8 +223,8 @@ Rules:
                   )}
                 </span>
                 
-                {p.status === 'duplicate' && <span className="text-xs text-warning-tx font-medium">Exists</span>}
-                {p.status === 'invalid' && <span className="text-xs text-danger-tx font-medium">Invalid format</span>}
+                {p.status === 'duplicate' && <span className="text-xs text-warning-tx font-medium">已存在</span>}
+                {p.status === 'invalid' && <span className="text-xs text-danger-tx font-medium">格式错误</span>}
               </div>
             ))}
           </div>
@@ -247,7 +235,7 @@ Rules:
               disabled={isImporting}
               className="button button-primary button-large w-full"
             >
-              {isImporting ? 'Importing…' : `Import ${validCount} ${validCount === 1 ? 'Word' : 'Words'}`}
+              {isImporting ? '正在导入…' : `导入 ${validCount} 个词`}
             </button>
           )}
         </section>
@@ -256,21 +244,21 @@ Rules:
       <section className="import-helper">
         <div>
           <Sparkles size={18} aria-hidden="true" />
-          <h2>AI Import Helper</h2>
+          <h2>AI 导入助手</h2>
         </div>
         <p>
-          Turn a screenshot or a block of text into Lexuni’s simple import format with your preferred AI tool.
+          用你常用的 AI 工具，把截图或文本整理成上面的导入格式。
         </p>
         <button onClick={copyPrompt} className="button button-secondary">
           {copied ? <CheckCircle2 size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
-          <span>{copied ? 'Prompt copied' : 'Copy AI Prompt'}</span>
+          <span>{copied ? '提示词已复制' : '复制 AI 提示词'}</span>
         </button>
       </section>
 
       <Modal 
         isOpen={!!importSuccess} 
         onClose={closeImportSuccess}
-        title="Import Complete"
+        title="导入完成"
         footer={
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -278,14 +266,14 @@ Rules:
               onClick={viewImportedGroup}
               className="button button-secondary"
             >
-              View Group
+              查看分组
             </button>
             <button
               type="button"
               onClick={closeImportSuccess}
               className="button button-primary"
             >
-              Done
+              完成
             </button>
           </div>
         }
@@ -295,13 +283,13 @@ Rules:
             <CheckCircle2 size={32} aria-hidden="true" />
           </div>
           <h3 className="mb-2 text-2xl font-bold text-tx">
-            {importSuccess?.count ?? 0} {(importSuccess?.count ?? 0) === 1 ? 'word' : 'words'} added
+            已添加 {importSuccess?.count ?? 0} 个词
           </h3>
           {importSuccess?.groupName ? (
             <p className="mb-1 break-words font-medium text-tx-secondary">{importSuccess.groupName}</p>
           ) : null}
           {(importSuccess?.duplicates ?? 0) > 0 ? (
-            <p className="mt-2 text-sm text-tx-muted">{importSuccess?.duplicates} duplicates skipped</p>
+            <p className="mt-2 text-sm text-tx-muted">已跳过 {importSuccess?.duplicates} 个重复词</p>
           ) : null}
         </div>
       </Modal>
@@ -309,14 +297,14 @@ Rules:
       <Modal
         isOpen={!!importError}
         onClose={() => setImportError(null)}
-        title="Import Failed"
+        title="导入失败"
         footer={
           <button
             type="button"
             onClick={() => setImportError(null)}
             className="button button-primary button-block"
           >
-            Try Again
+            重试
           </button>
         }
       >

@@ -1,457 +1,216 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Download, FileJson2, Moon, Sun, Upload } from 'lucide-react';
 import { db } from '../db/db';
-import { Settings as SettingsIcon, Check, Download, Upload, AlertTriangle, ExternalLink, ChevronDown, Snowflake, Sun, Moon, Terminal, MessageCircle, Battery } from 'lucide-react';
-import Modal from '../components/Modal';
 import { applyTheme, normalizeThemeId } from '../lib/theme';
+import { normalizeWordRecord } from '../lib/wordData';
 import type { SessionAnswer, StudySession, Word, WordGroup } from '../types';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../lib/toastContext';
+import { wordKey } from '../lib/wordData';
 
-type BackupData = {
-  groups?: WordGroup[];
-  words: Word[];
-  sessions?: StudySession[];
-  sessionAnswers?: SessionAnswer[];
-  preferences?: { theme?: string };
-};
-
-type LexuniBackup = {
+type WordbookImport = { total: number; words: Word[]; groups: WordGroup[]; duplicates: number; invalid: number };
+type FullBackup = {
   format: 'lexuni-backup';
   version: number;
-  appVersion?: string;
   exportedAt: string;
-  data: BackupData;
+  data: { words: unknown[]; groups?: WordGroup[]; sessions?: StudySession[]; sessionAnswers?: SessionAnswer[]; preferences?: { theme?: string } };
 };
 
-type RestorePreview = {
-  backup: LexuniBackup;
-  date: string;
-  words: number;
-  groups: number;
-  sessionsCompleted: number;
-  sessionsActive: number;
-  theme: string;
-};
-
-const APP_VERSION = '1.0.0';
-
-const THEMES = [
-  { id: 'arctic', name: 'Arctic', icon: Snowflake, description: 'Light · crisp and cool', tier: 'primary', preview: { bg: '#edf5fa', accent: '#1261a6' } },
-  { id: 'midnight', name: 'Midnight', icon: Moon, description: 'Dark · deep and focused', tier: 'primary', preview: { bg: '#07111f', accent: '#45b6e9' } },
-  { id: 'developer', name: 'Developer', icon: Terminal, description: 'Editor inspired', tier: 'more', preview: { bg: '#17191c', accent: '#67d4de' } },
-  { id: 'lingo', name: 'Lingo', icon: MessageCircle, description: 'Bright and energetic', tier: 'more', preview: { bg: '#eef9ef', accent: '#27a85b' } },
-  { id: 'battery', name: 'Battery', icon: Battery, description: 'OLED minimal', tier: 'more', preview: { bg: '#000000', accent: '#78c895' } },
-  { id: 'sunset', name: 'Sunset', icon: Sun, description: 'Warm and earthy', tier: 'more', preview: { bg: '#f6e7d2', accent: '#b84e2e' } },
-];
-
-function ThemeChip({ preview, compact = false }: { preview: { bg: string, accent: string }, compact?: boolean }) {
-  return (
-    <div className={`theme-chip ${compact ? 'theme-chip-compact' : ''}`}>
-      <div className="theme-chip-background" style={{ backgroundColor: preview.bg }} />
-      <div className="theme-chip-accent" style={{ backgroundColor: preview.accent }} />
-    </div>
-  );
+function downloadJson(data: unknown, filename: string) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+function isGroup(value: unknown): value is WordGroup {
+  return Boolean(value) && typeof value === 'object' && typeof (value as WordGroup).id === 'string' && typeof (value as WordGroup).name === 'string';
+}
+
+function sourceGroupId(value: unknown): string {
+  if (!value || typeof value !== 'object') return '__ungrouped__';
+  const groupId = (value as { groupId?: unknown }).groupId;
+  return typeof groupId === 'string' && groupId ? groupId : '__ungrouped__';
+}
 
 export default function Settings() {
-  const wordsCount = useLiveQuery(() => db.words.count());
-  const groupsCount = useLiveQuery(() => db.groups.count());
-  const sessionsCount = useLiveQuery(() => db.sessions.count());
-  
-  const [activeTheme, setActiveTheme] = useState(() => {
-    return normalizeThemeId(localStorage.getItem('lexuni-theme') || 'arctic');
-  });
+  const showToast = useToast();
+  const counts = useLiveQuery(async () => ({ words: await db.words.count(), groups: await db.groups.count() }));
+  const [theme, setTheme] = useState(() => normalizeThemeId(localStorage.getItem('lexuni-theme')));
+  const [wordbookImport, setWordbookImport] = useState<WordbookImport | null>(null);
+  const [backupRestore, setBackupRestore] = useState<FullBackup | null>(null);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const wordbookFile = useRef<HTMLInputElement>(null);
+  const backupFile = useRef<HTMLInputElement>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [restoreSuccess, setRestoreSuccess] = useState(false);
-  const [isThemeExpanded, setIsThemeExpanded] = useState(false);
-
-  const handleExportBackup = async () => {
-    const groups = await db.groups.toArray();
-    const words = await db.words.toArray();
-    const sessions = await db.sessions.toArray();
-    const sessionAnswers = await db.sessionAnswers.toArray();
-
-    const backup = {
-      format: "lexuni-backup",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      appVersion: APP_VERSION,
-      data: {
-        groups,
-        words,
-        sessions,
-        sessionAnswers,
-        preferences: {
-          theme: normalizeThemeId(localStorage.getItem('lexuni-theme'))
-        }
-      }
-    };
-
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    
-    const d = new Date();
-    const dateStr = d.toISOString().split('T')[0];
-    const timeStr = d.toTimeString().split(' ')[0].replace(/:/g, '').substring(0, 4);
-    a.download = `lexuni-backup-${dateStr}-${timeStr}.json`;
-    
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setRestorePreview(null);
-    setRestoreError(null);
-    setRestoreSuccess(false);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const json = JSON.parse(text) as Partial<LexuniBackup>;
-
-        if (json.format !== "lexuni-backup") {
-          setRestoreError("This file is not a valid Lexuni backup.");
-          return;
-        }
-        
-        if (typeof json.version !== 'number' || json.version > 1) {
-          setRestoreError("This backup version is not supported.");
-          return;
-        }
-
-        if (!json.data || !Array.isArray(json.data.words) || typeof json.exportedAt !== 'string') {
-          setRestoreError("Missing required structures in backup.");
-          return;
-        }
-
-        setRestorePreview({
-          backup: json as LexuniBackup,
-          date: json.exportedAt,
-          words: json.data.words.length,
-          groups: json.data.groups?.length || 0,
-          sessionsCompleted: json.data.sessions?.filter(session => session.status === 'finished' || !session.status).length || 0,
-          sessionsActive: json.data.sessions?.filter(session => session.status === 'active').length || 0,
-          theme: normalizeThemeId(json.data.preferences?.theme)
-        });
-      } catch {
-        setRestoreError("This file is corrupted or not valid JSON.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleConfirmRestore = async () => {
-    if (!restorePreview || isRestoring) return;
-    setIsRestoring(true);
-    const backup = restorePreview.backup;
-    
+  const exportWordbook = async () => {
     try {
-      await db.transaction('rw', db.words, db.groups, db.sessions, db.sessionAnswers, async () => {
-        await db.words.clear();
-        await db.groups.clear();
-        await db.sessions.clear();
-        await db.sessionAnswers.clear();
+      const [words, groups] = await Promise.all([db.words.toArray(), db.groups.toArray()]);
+      downloadJson({
+        format: 'my-wordbook', version: 1, exportedAt: new Date().toISOString(), groups,
+        words: words.map(({ id, groupId, word, ipaUK, ipaUS, partOfSpeech, meaning, examples, note, starred, createdAt, updatedAt }) =>
+          ({ id, groupId, word, ipaUK, ipaUS, partOfSpeech, meaning, examples, note, starred, createdAt, updatedAt }))
+      }, `my-wordbook-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      showToast('备份已生成');
+    } catch { showToast('导出失败，请重试。', 'error'); }
+  };
 
-        if (backup.data.groups?.length) await db.groups.bulkAdd(backup.data.groups);
-        if (backup.data.words?.length) await db.words.bulkAdd(backup.data.words);
-        if (backup.data.sessions?.length) await db.sessions.bulkAdd(backup.data.sessions);
-        if (backup.data.sessionAnswers?.length) await db.sessionAnswers.bulkAdd(backup.data.sessionAnswers);
-      });
-
-      if (backup.data.preferences?.theme) {
-        handleThemeChange(backup.data.preferences.theme);
+  const readWordbook = async (file?: File) => {
+    if (!file) return;
+    setMessage('');
+    setWordbookImport(null);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('JSON 根节点格式无效。');
+      const json = parsed as Record<string, unknown>;
+      if ((json.format === 'my-wordbook' || json.format === 'lexuni-wordbook' || json.format === 'lexuni-backup') && json.version !== 1) throw new Error('不支持这个 JSON 版本。');
+      const payload = json.format === 'my-wordbook' || json.format === 'lexuni-wordbook' ? json : json.format === 'lexuni-backup' && json.data && typeof json.data === 'object' ? json.data as Record<string, unknown> : null;
+      if (!payload || !Array.isArray(payload.words)) throw new Error('请选择词书 JSON 或 Lexuni 备份文件。');
+      const rawGroups = Array.isArray(payload.groups) ? payload.groups.filter(isGroup) : [];
+      const existing = new Set((await db.words.toArray()).map(word => wordKey(word.word)));
+      const incoming = new Set<string>();
+      const entries: Word[] = [];
+      let duplicates = 0;
+      let invalid = 0;
+      for (const raw of payload.words) {
+        try {
+          const word = normalizeWordRecord(raw, sourceGroupId(raw));
+          const key = wordKey(word.word);
+          if (existing.has(key) || incoming.has(key)) { duplicates += 1; continue; }
+          incoming.add(key);
+          entries.push(word);
+        } catch { invalid += 1; }
       }
-      
-      setRestorePreview(null);
-      setRestoreSuccess(true);
-    } catch {
-      setRestoreError("Could not restore this backup. Your current data was not changed.");
-      setRestorePreview(null);
-    } finally {
-      setIsRestoring(false);
+      setWordbookImport({ total: payload.words.length, words: entries, groups: rawGroups, duplicates, invalid });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'JSON 文件无法读取。');
     }
   };
 
-  const handleThemeChange = (themeId: string) => {
-    const normalizedThemeId = applyTheme(themeId);
-    setActiveTheme(normalizedThemeId);
+  const confirmWordbookImport = async () => {
+    if (!wordbookImport || busy) return;
+    setBusy(true);
+    try {
+      const currentGroups = await db.groups.toArray();
+      const groupNames = new Map(wordbookImport.groups.map(group => [group.id, group.name]));
+      const destinations = new Map<string, string>();
+      const newGroups: WordGroup[] = [];
+      for (const word of wordbookImport.words) {
+        if (destinations.has(word.groupId)) continue;
+        const name = groupNames.get(word.groupId) || 'JSON 导入';
+        const existing = [...currentGroups, ...newGroups].find(group => group.name === name);
+        if (existing) destinations.set(word.groupId, existing.id);
+        else {
+          const group = { id: crypto.randomUUID(), name, createdAt: new Date().toISOString() };
+          newGroups.push(group);
+          destinations.set(word.groupId, group.id);
+        }
+      }
+      let added = 0;
+      let skipped = wordbookImport.duplicates;
+      await db.transaction('rw', db.groups, db.words, async () => {
+        const existingWords = new Set((await db.words.toArray()).map(word => wordKey(word.word)));
+        const entries = wordbookImport.words.filter(word => {
+          if (existingWords.has(wordKey(word.word))) { skipped += 1; return false; }
+          existingWords.add(wordKey(word.word));
+          return true;
+        }).map(word => ({ ...word, groupId: destinations.get(word.groupId)! }));
+        const usedGroupIds = new Set(entries.map(word => word.groupId));
+        if (newGroups.length) await db.groups.bulkAdd(newGroups.filter(group => usedGroupIds.has(group.id)));
+        if (entries.length) await db.words.bulkAdd(entries);
+        added = entries.length;
+      });
+      setWordbookImport(null);
+      showToast(`成功新增 ${added} 个单词，跳过 ${skipped} 个重复词，忽略 ${wordbookImport.invalid} 个无效词条`);
+    } catch {
+      showToast('导入失败，已有数据未被修改。', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  return (
-    <div className="page-shell page-enter">
-      <header className="page-header">
-        <span className="eyebrow">Make it yours</span>
-        <h1>Settings</h1>
-        <p>Preferences and app info</p>
-      </header>
+  const exportFullBackup = async () => {
+    try {
+      const [groups, words, sessions, sessionAnswers] = await Promise.all([
+        db.groups.toArray(), db.words.toArray(), db.sessions.toArray(), db.sessionAnswers.toArray()
+      ]);
+      downloadJson({ format: 'lexuni-backup', version: 1, appVersion: '1.0.0', exportedAt: new Date().toISOString(), data: {
+        groups, words, sessions, sessionAnswers, preferences: { theme: normalizeThemeId(localStorage.getItem('lexuni-theme')) }
+      } }, `lexuni-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      showToast('完整备份已生成');
+    } catch { showToast('导出失败，请重试。', 'error'); }
+  };
 
-      <section className="settings-section">
-        <button
-          type="button"
-          className="settings-section-head"
-          onClick={() => setIsThemeExpanded(!isThemeExpanded)}
-          aria-expanded={isThemeExpanded}
-        >
-          <div className="flex items-center space-x-2">
-            <h2>
-              <SettingsIcon size={18} />
-              <span>Appearance</span>
-            </h2>
-          </div>
-          <div className="flex items-center space-x-3">
-            {(() => {
-              const active = THEMES.find(t => t.id === activeTheme);
-              return active ? (
-                <div className="flex items-center space-x-2">
-                  <active.icon size={16} className="text-tx-secondary hidden sm:block" />
-                  <ThemeChip preview={active.preview} compact />
-                </div>
-              ) : null;
-            })()}
-            <div className="text-tx-muted group-hover:text-tx transition-colors">
-              <ChevronDown size={20} className={`transition-transform duration-200 ${isThemeExpanded ? 'rotate-180' : ''}`} />
-            </div>
-          </div>
-        </button>
-        
-        <div
-          className={`theme-options ${isThemeExpanded ? 'theme-options-open' : ''}`}
-          aria-hidden={!isThemeExpanded}
-          inert={!isThemeExpanded}
-        >
-          <p className="theme-tier-label">Primary</p>
-          {THEMES.filter(theme => theme.tier === 'primary').map((theme) => {
-            const isActive = activeTheme === theme.id;
-            return (
-              <button
-                key={theme.id}
-                onClick={() => handleThemeChange(theme.id)}
-                className={`theme-option ${isActive ? 'theme-option-active' : ''}`}
-              >
-                <div className="mr-3">
-                  <theme.icon size={20} className="text-tx-secondary" />
-                </div>
-                <div className="flex-1">
-                  <h3>{theme.name}</h3>
-                  <p>{theme.description}</p>
-                </div>
-                <div className="mr-1 flex items-center">
-                  <ThemeChip preview={theme.preview} />
-                </div>
-                {isActive && (
-                  <div className="theme-check">
-                    <Check size={14} strokeWidth={3} />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-          <p className="theme-tier-label">More</p>
-          {THEMES.filter(theme => theme.tier === 'more').map((theme) => {
-            const isActive = activeTheme === theme.id;
-            return (
-              <button key={theme.id} onClick={() => handleThemeChange(theme.id)} className={`theme-option ${isActive ? 'theme-option-active' : ''}`}>
-                <div className="mr-3"><theme.icon size={20} className="text-tx-secondary" /></div>
-                <div className="flex-1"><h3>{theme.name}</h3><p>{theme.description}</p></div>
-                <div className="mr-1 flex items-center"><ThemeChip preview={theme.preview} /></div>
-                {isActive ? <div className="theme-check"><Check size={14} strokeWidth={3} /></div> : null}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+  const readBackup = async (file?: File) => {
+    if (!file) return;
+    setMessage('');
+    setBackupRestore(null);
+    try {
+      const parsed = JSON.parse(await file.text()) as FullBackup;
+      if (parsed.format !== 'lexuni-backup' || parsed.version !== 1 || !parsed.data || !Array.isArray(parsed.data.words)) throw new Error('不是受支持的 Lexuni 完整备份。');
+      const groups = (parsed.data.groups ?? []).filter(isGroup);
+      const fallbackId = groups[0]?.id || '__restored__';
+      const groupIds = new Set(groups.map(group => group.id));
+      parsed.data.words.forEach(raw => normalizeWordRecord(raw, groupIds.has(sourceGroupId(raw)) ? sourceGroupId(raw) : fallbackId, true));
+      setBackupRestore(parsed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '备份文件无法读取。');
+    }
+  };
 
-      <section className="settings-section">
-        <h2 className="settings-title">App Info</h2>
-        <div className="settings-group">
-          <div className="settings-row">
-            <span className="font-bold text-tx-secondary">Vocabulary Size</span>
-            <span className="text-tx-secondary font-medium">{wordsCount ?? '-'} words</span>
-          </div>
-          <div className="settings-row">
-            <span className="font-bold text-tx-secondary">Import Groups</span>
-            <span className="text-tx-secondary font-medium">{groupsCount ?? '-'} {groupsCount === 1 ? 'group' : 'groups'}</span>
-          </div>
-          <div className="settings-row">
-            <span className="font-bold text-tx-secondary">Total Sessions</span>
-            <span className="text-tx-secondary font-medium">{sessionsCount ?? '-'} {sessionsCount === 1 ? 'session' : 'sessions'}</span>
-          </div>
-          <div className="settings-row">
-            <span className="font-bold text-tx-secondary">Lexuni Version</span>
-            <span className="text-tx-secondary font-medium">{APP_VERSION}</span>
-          </div>
-        </div>
-      </section>
+  const confirmRestore = async () => {
+    if (!backupRestore || busy) return;
+    setBusy(true);
+    try {
+      const groups = (backupRestore.data.groups ?? []).filter(isGroup);
+      const fallbackGroup = { id: crypto.randomUUID(), name: '恢复的词汇', createdAt: new Date().toISOString() };
+      const groupIds = new Set(groups.map(group => group.id));
+      const words = backupRestore.data.words.map(raw => normalizeWordRecord(raw, groupIds.has(sourceGroupId(raw)) ? sourceGroupId(raw) : fallbackGroup.id, true));
+      if (words.some(word => word.groupId === fallbackGroup.id)) groups.push(fallbackGroup);
+      const sessions = (backupRestore.data.sessions ?? []).map(session => ({
+        ...session, status: session.status || 'finished' as const,
+        activeDurationSeconds: session.activeDurationSeconds || 0,
+        questionQueue: session.questionQueue || [], reinforcementQueue: session.reinforcementQueue || []
+      }));
+      await db.transaction('rw', db.words, db.groups, db.sessions, db.sessionAnswers, async () => {
+        await db.words.clear(); await db.groups.clear(); await db.sessions.clear(); await db.sessionAnswers.clear();
+        if (groups.length) await db.groups.bulkAdd(groups);
+        if (words.length) await db.words.bulkAdd(words);
+        if (sessions.length) await db.sessions.bulkAdd(sessions);
+        if (backupRestore.data.sessionAnswers?.length) await db.sessionAnswers.bulkAdd(backupRestore.data.sessionAnswers);
+      });
+      if (backupRestore.data.preferences?.theme) setTheme(applyTheme(backupRestore.data.preferences.theme));
+      setBackupRestore(null);
+      showToast('完整备份已恢复');
+    } catch {
+      showToast('恢复失败，原有数据未被修改。', 'error');
+    } finally { setBusy(false); }
+  };
 
-      <section className="settings-section">
-        <h2 className="settings-title">Data Management</h2>
-        <div className="settings-content">
-          <p className="text-tx-secondary font-medium mb-5 leading-relaxed">
-            Export your Lexuni data to move it to another device or keep a personal backup.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={handleExportBackup}
-              className="button button-secondary flex-1"
-            >
-              <Download size={18} />
-              <span>Export All Data</span>
-            </button>
-            
-            <input 
-              type="file" 
-              accept=".json"
-              className="hidden" 
-              ref={fileInputRef} 
-              onChange={handleFileSelect}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="button button-primary flex-1"
-            >
-              <Upload size={18} />
-              <span>Import Backup</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <h2 className="settings-title">Developer</h2>
-        <div className="settings-content flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="font-bold text-tx text-lg">Hamza Bektaş</h3>
-            <p className="text-tx-secondary font-medium">Developer of Lexuni</p>
-          </div>
-          <a
-            href="https://hamzabektas.xyz"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="button button-secondary flex-1 sm:flex-none"
-          >
-            <span>Visit Website</span>
-            <ExternalLink size={18} />
-          </a>
-        </div>
-      </section>
-
-      <Modal
-        isOpen={!!restoreError}
-        onClose={() => setRestoreError(null)}
-        title="Restore Error"
-        footer={
-          <button
-            type="button"
-            onClick={() => setRestoreError(null)}
-              className="button button-primary button-block"
-          >
-            Done
-          </button>
-        }
-      >
-        <div className="space-y-4 text-center">
-          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-danger-bg text-danger-tx">
-            <AlertTriangle size={32} aria-hidden="true" />
-          </div>
-          <p className="text-tx font-medium">{restoreError}</p>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={!!restorePreview}
-        onClose={() => { if (!isRestoring) setRestorePreview(null); }}
-        title="Restore Lexuni Backup?"
-        dismissible={!isRestoring}
-        footer={
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => setRestorePreview(null)}
-              disabled={isRestoring}
-              autoFocus
-              data-autofocus
-              className="button button-secondary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmRestore}
-              disabled={isRestoring}
-              className="button button-danger"
-            >
-              {isRestoring ? 'Restoring…' : 'Restore Backup'}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-5">
-          <div>
-            <p className="text-sm font-medium text-tx-secondary">Backup created:</p>
-            <p className="break-words font-bold text-tx">
-              {restorePreview?.date
-                ? new Date(restorePreview.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : 'Unknown date'}
-            </p>
-          </div>
-
-          <div>
-            <p className="mb-2 text-sm font-medium text-tx-secondary">Contains:</p>
-            <ul className="list-inside list-disc space-y-1 font-medium text-tx">
-              <li>{restorePreview?.words ?? 0} {(restorePreview?.words ?? 0) === 1 ? 'word' : 'words'}</li>
-              <li>{restorePreview?.groups ?? 0} import {(restorePreview?.groups ?? 0) === 1 ? 'group' : 'groups'}</li>
-              <li>{restorePreview?.sessionsCompleted ?? 0} completed {(restorePreview?.sessionsCompleted ?? 0) === 1 ? 'session' : 'sessions'}</li>
-              {(restorePreview?.sessionsActive ?? 0) > 0 ? (
-                <li className="text-primary">{restorePreview?.sessionsActive} active session</li>
-              ) : null}
-              <li>Theme: <span className="capitalize">{restorePreview?.theme || 'default'}</span></li>
-            </ul>
-          </div>
-
-          <div className="restore-warning">
-            <p className="text-sm font-bold text-danger-tx">Warning:</p>
-            <p className="mt-1 text-sm font-medium text-danger-tx">
-              Restoring this backup will permanently replace all current Lexuni data on this device.
-            </p>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={restoreSuccess}
-        onClose={() => setRestoreSuccess(false)}
-        title="Restore Complete"
-        footer={
-          <button
-            type="button"
-            onClick={() => setRestoreSuccess(false)}
-            className="button button-primary button-block"
-          >
-            Done
-          </button>
-        }
-      >
-        <div className="py-2 text-center">
-          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-success-bg text-success-tx">
-            <Check size={32} strokeWidth={3} aria-hidden="true" />
-          </div>
-          <p className="mb-2 text-lg font-bold text-tx">Backup restored successfully.</p>
-          <p className="text-sm text-tx-secondary">Your vocabulary, groups, and sessions have been updated.</p>
-        </div>
-      </Modal>
-    </div>
-  );
+  return <div className="page-shell page-enter book-settings">
+    <header className="page-header"><h1>设置与数据</h1><p>{counts?.words ?? 0} 个单词 · {counts?.groups ?? 0} 个分组，保存在此浏览器的 IndexedDB 中。</p></header>
+    <section className="settings-section"><h2 className="settings-title">外观</h2><div className="book-theme-options">
+      <button type="button" className={`book-theme-choice ${theme === 'arctic' ? 'active' : ''}`} onClick={() => setTheme(applyTheme('arctic'))}><Sun size={19} />浅色 · Arctic</button>
+      <button type="button" className={`book-theme-choice ${theme === 'midnight' ? 'active' : ''}`} onClick={() => setTheme(applyTheme('midnight'))}><Moon size={19} />深色 · Midnight</button>
+    </div></section>
+    <section className="settings-section"><h2 className="settings-title">词书 JSON</h2><p className="book-settings-copy">导出单词、释义、例句、笔记、重点标记和分组。导入时合并词条，重复英文单词会跳过。</p><div className="book-settings-actions">
+      <button type="button" className="book-button book-button-subtle" onClick={() => void exportWordbook()}><Download size={18} />导出词书 JSON</button>
+      <button type="button" className="book-button book-button-primary" onClick={() => wordbookFile.current?.click()}><Upload size={18} />导入词书 JSON</button>
+      <input ref={wordbookFile} type="file" accept=".json,application/json" hidden onChange={event => { void readWordbook(event.target.files?.[0]); event.target.value = ''; }} />
+    </div>{wordbookImport ? <div className="book-import-preview"><FileJson2 size={20} /><div><strong>文件中的单词：{wordbookImport.total}</strong><p>新增：{wordbookImport.words.length} · 重复：{wordbookImport.duplicates} · 无效：{wordbookImport.invalid}</p><p>确认后合并到当前词书，不覆盖已有词条。</p></div><button type="button" className="book-button book-button-primary" onClick={() => void confirmWordbookImport()} disabled={busy || wordbookImport.words.length === 0}>{busy ? '导入中…' : '确认导入'}</button><button type="button" className="book-text-button" onClick={() => setWordbookImport(null)}>取消</button></div> : null}</section>
+    <section className="settings-section"><h2 className="settings-title">完整备份</h2><p className="book-settings-copy">兼容原版 Lexuni 备份，包含旧练习记录。恢复完整备份会替换此浏览器中现有的数据。</p><div className="book-settings-actions">
+      <button type="button" className="book-button book-button-subtle" onClick={() => void exportFullBackup()}><Download size={18} />导出完整备份</button>
+      <button type="button" className="book-button book-button-subtle" onClick={() => backupFile.current?.click()}><Upload size={18} />恢复完整备份</button>
+      <input ref={backupFile} type="file" accept=".json,application/json" hidden onChange={event => { void readBackup(event.target.files?.[0]); event.target.value = ''; }} />
+    </div></section>
+    {message ? <p className="book-settings-message" role="status">{message}</p> : null}
+    <p className="book-settings-footnote">Lexuni 基于 MIT License。词汇数据保存在当前设备；请定期导出 JSON 备份。</p>
+    <ConfirmDialog isOpen={Boolean(backupRestore)} onClose={() => setBackupRestore(null)} onConfirm={confirmRestore} title="恢复完整备份？" description={`备份包含 ${backupRestore?.data.words.length ?? 0} 个单词。恢复会替换当前所有单词、分组和旧练习记录。`} confirmLabel="确认恢复" cancelLabel="取消" isPending={busy} danger />
+  </div>;
 }

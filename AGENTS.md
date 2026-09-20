@@ -8,15 +8,12 @@ Before making changes:
 - Do not change backup compatibility without a strong reason.
 
 ## Product
-- Lexuni is a fast personal English-Turkish vocabulary trainer.
+- Lexuni is now a local-first personal English-Chinese wordbook.
+- Keep the existing Dexie database name and preserve user data through versioned migrations.
+- Keep legacy practice data and backup compatibility while practice pages are hidden.
 - Arctic and Midnight are the primary visual themes.
 - Mobile-first design is required.
-- Mobile navigation order:
-  Words → Practice → Home → History → Settings.
-- Practice must support EN → TR and TR → EN.
-- Wrong answers reveal the correct answer and wait for Continue.
-- Correct answers auto-advance smoothly.
-- Active sessions persist until explicitly finished.
+- Mobile navigation order: All Words → Starred → Add → Settings.
 
 ## UI
 - Avoid generic AI-generated SaaS dashboard aesthetics.
