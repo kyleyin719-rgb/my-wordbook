@@ -46,3 +46,10 @@
 ## 开发和验收
 
 使用 Node.js 22.12+。运行 `npm ci`、`npm run dev`、`npm test`、`npm run lint`、`npm run build`。自动测试覆盖 CSV 引号与逗号、中英文、空字段、重复与无效行、布尔值、三条例句、数据质量筛选和 1000 条批量事务写入。浏览器验收包含桌面 CSV 预览与导入、刚导入筛选、数据质量筛选、390px 手机布局、控制台错误和 PWA 构建。
+
+## GitHub Pages 与 PWA
+
+- 生产站点固定使用 `/my-wordbook/` 作为 Vite base；React 使用 HashRouter，子页面刷新不依赖服务器回退。
+- PWA 名称为“我的电子词书”，启动地址为 `/my-wordbook/#/words`，Service Worker scope 为 `/my-wordbook/`，静态页面和构建资源由 Workbox 预缓存。
+- `.github/workflows/deploy.yml` 在 `main` 分支推送后通过 GitHub Pages Actions 构建并发布 `dist`。
+- 应用更新和 Service Worker 缓存清理不操作 `LexuniDB`；IndexedDB 数据按浏览器和站点来源保存。

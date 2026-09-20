@@ -287,7 +287,7 @@ html, body, #root, .app-frame, .app-sidebar, .mobile-nav, .modal-dialog {
 
 .app-frame { min-height: 100dvh; background: var(--background); color: var(--text-primary); }
 .app-main { width: 100%; min-height: 100dvh; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
-.skip-link { position: fixed; inset: 0.75rem auto auto 0.75rem; z-index: 200; transform: translateY(-150%); border-radius: var(--radius-control); background: var(--text-primary); padding: 0.7rem 1rem; color: var(--background); font-weight: 700; transition: transform 140ms var(--ease-out-ui); }
+.skip-link { position: fixed; inset: 0.75rem auto auto 0.75rem; z-index: 200; transform: translateY(-150%); border: 0; border-radius: var(--radius-control); background: var(--text-primary); padding: 0.7rem 1rem; color: var(--background); font: inherit; font-weight: 700; transition: transform 140ms var(--ease-out-ui); }
 .skip-link:focus { transform: translateY(0); }
 
 .app-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 13.75rem; flex-direction: column; border-inline-end: 1px solid var(--border); background: var(--nav-background); padding: 2.25rem 1.2rem; }

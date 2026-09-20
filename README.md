@@ -24,9 +24,18 @@ npm run dev
 质量检查：
 
 ```bash
+npm test
 npm run lint
 npm run build
 ```
+
+## GitHub Pages 部署
+
+本项目按仓库名 `my-wordbook` 配置，生产地址格式为 `https://<username>.github.io/my-wordbook/`。路由使用 HashRouter，例如 `https://<username>.github.io/my-wordbook/#/words`，可以直接刷新详情、重点、导入和设置页面。
+
+在 GitHub 仓库的 **Settings → Pages → Build and deployment** 中，把 **Source** 设为 **GitHub Actions**。之后每次推送 `main` 分支，`.github/workflows/deploy.yml` 会执行 `npm ci`、`npm run build` 并发布 `dist`。
+
+部署只更新缓存的应用文件，不会修改浏览器 IndexedDB。不同设备、浏览器和域名拥有各自独立的本地词库，请通过 JSON 导出与导入迁移数据，并定期备份。
 
 ## 导入与备份
 

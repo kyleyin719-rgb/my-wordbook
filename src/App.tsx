@@ -1,4 +1,4 @@
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { BookOpen, Clock3, Download, Settings, Star } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
@@ -47,9 +47,9 @@ function Sidebar() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ToastProvider><div className="book-app">
-        <a className="skip-link" href="#main-content">跳到内容</a>
+        <button type="button" className="skip-link" onClick={() => document.getElementById('main-content')?.focus()}>跳到内容</button>
         <Sidebar />
         <main id="main-content" className="book-content" tabIndex={-1}>
           <Routes>
@@ -66,6 +66,6 @@ export default function App() {
         </main>
         <Navigation />
       </div></ToastProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
