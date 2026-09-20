@@ -8,7 +8,7 @@
 
 - React、TypeScript、Vite、Tailwind CSS、Dexie / IndexedDB、`vite-plugin-pwa`。
 - `/words`：全部单词；`/starred`：重点单词；`/recent`：最近添加。
-- `/words/:id`：可直接打开的单词详情；`/add`：添加单词；`/words/import`：文本词表导入；`/settings`：主题和 JSON 数据管理。
+- `/words/:id`：可直接打开的单词详情；`/add`：添加单词；`/words/import`：CSV 和文本词表导入；`/settings`：主题、JSON 数据管理和词库数据检查。
 - 桌面端使用左侧导航、中间词表、右侧详情；窄屏单栏显示词表或详情，底部导航为全部、重点、添加、设置。
 
 ## 数据
@@ -23,8 +23,17 @@
 ## 导入与导出
 
 - 文本导入延用原版的分组预览、去重和事务写入；默认示例改为英汉词汇。
+- CSV 导入使用 Papa Parse，支持 UTF-8、带引号的逗号与引号、CRLF / LF、空字段和最多三组双语例句。`word` 与 `meaning` 为必填字段，其余缺项会标记为数据不完整，但允许导入。
+- CSV 模板名为 `my-wordbook-template.csv`，包含 UTF-8 BOM、固定表头和一条中文示例，可直接用 Excel 编辑。导入预览显示文件名、汇总指标和前 20 条明细。
+- CSV 重复键为 `word.trim().toLowerCase()`。预览和提交时都会检查当前数据库及文件内重复项；确认后在一个 Dexie 事务中 `bulkAdd`，失败会整体回滚，并可筛选查看本批刚导入的词条。
 - `my-wordbook` JSON 用于合并导入和导出完整词条、例句、笔记及分组；导入预览会分别统计新增、重复和无效词条，按英文词条 trim 后忽略大小写跳过重复项。
 - 原版 `lexuni-backup` 格式仍可完整导出与恢复。恢复时对旧词条进行规范化，再在一个事务内替换数据。
+
+## 第三阶段数据质量
+
+- 设置页提供词库数据检查面板，统计完整词条以及缺英式音标、美式音标、词性、中文释义、例句、例句翻译和笔记的数量。
+- 完整度由 `src/lib/wordQuality.ts` 根据当前词条动态计算，不向 IndexedDB 增加状态字段，也没有新增或修改 Dexie 迁移。
+- 点击任一统计项会进入对应的词表筛选；筛选后的词条继续使用现有搜索、排序、详情、编辑和语音功能。
 
 ## 第二阶段交互
 
@@ -36,4 +45,4 @@
 
 ## 开发和验收
 
-使用 Node.js 22.12+。运行 `npm ci`、`npm run dev`、`npm run lint`、`npm run build`。检查桌面三栏、手机单栏、浅色和深色主题、基础增删改查、JSON 导入导出和 PWA 构建。
+使用 Node.js 22.12+。运行 `npm ci`、`npm run dev`、`npm test`、`npm run lint`、`npm run build`。自动测试覆盖 CSV 引号与逗号、中英文、空字段、重复与无效行、布尔值、三条例句、数据质量筛选和 1000 条批量事务写入。浏览器验收包含桌面 CSV 预览与导入、刚导入筛选、数据质量筛选、390px 手机布局、控制台错误和 PWA 构建。

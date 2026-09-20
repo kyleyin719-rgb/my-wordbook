@@ -8,6 +8,7 @@ import type { SessionAnswer, StudySession, Word, WordGroup } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../lib/toastContext';
 import { wordKey } from '../lib/wordData';
+import DataQuality from '../components/DataQuality';
 
 type WordbookImport = { total: number; words: Word[]; groups: WordGroup[]; duplicates: number; invalid: number };
 type FullBackup = {
@@ -204,6 +205,7 @@ export default function Settings() {
       <button type="button" className="book-button book-button-primary" onClick={() => wordbookFile.current?.click()}><Upload size={18} />导入词书 JSON</button>
       <input ref={wordbookFile} type="file" accept=".json,application/json" hidden onChange={event => { void readWordbook(event.target.files?.[0]); event.target.value = ''; }} />
     </div>{wordbookImport ? <div className="book-import-preview"><FileJson2 size={20} /><div><strong>文件中的单词：{wordbookImport.total}</strong><p>新增：{wordbookImport.words.length} · 重复：{wordbookImport.duplicates} · 无效：{wordbookImport.invalid}</p><p>确认后合并到当前词书，不覆盖已有词条。</p></div><button type="button" className="book-button book-button-primary" onClick={() => void confirmWordbookImport()} disabled={busy || wordbookImport.words.length === 0}>{busy ? '导入中…' : '确认导入'}</button><button type="button" className="book-text-button" onClick={() => setWordbookImport(null)}>取消</button></div> : null}</section>
+    <DataQuality />
     <section className="settings-section"><h2 className="settings-title">完整备份</h2><p className="book-settings-copy">兼容原版 Lexuni 备份，包含旧练习记录。恢复完整备份会替换此浏览器中现有的数据。</p><div className="book-settings-actions">
       <button type="button" className="book-button book-button-subtle" onClick={() => void exportFullBackup()}><Download size={18} />导出完整备份</button>
       <button type="button" className="book-button book-button-subtle" onClick={() => backupFile.current?.click()}><Upload size={18} />恢复完整备份</button>

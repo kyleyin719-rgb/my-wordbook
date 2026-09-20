@@ -6,6 +6,7 @@ import { db } from '../db/db';
 import type { Word } from '../types';
 import { normalizeWordRecord, wordKey } from '../lib/wordData';
 import { useToast } from '../lib/toastContext';
+import { matchesQualityFilter, type QualityFilter } from '../lib/wordQuality';
 import WordDetail from '../components/WordDetail';
 import WordEditor, { type WordDraft } from '../components/WordEditor';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -16,6 +17,17 @@ type Props = { view: View; initialAdd?: boolean };
 
 const SORT_KEY = 'lexuni-word-sort-v1';
 const SORT_OPTIONS: SortOrder[] = ['recent', 'az', 'za', 'starred'];
+const QUALITY_FILTERS: QualityFilter[] = ['complete', 'missing-ipa-uk', 'missing-ipa-us', 'missing-pos', 'missing-meaning', 'missing-example', 'missing-example-translation', 'missing-note'];
+const QUALITY_LABELS: Record<QualityFilter, string> = {
+  complete: '完整词条',
+  'missing-ipa-uk': '缺英式音标',
+  'missing-ipa-us': '缺美式音标',
+  'missing-pos': '缺词性',
+  'missing-meaning': '缺中文释义',
+  'missing-example': '缺例句',
+  'missing-example-translation': '缺例句翻译',
+  'missing-note': '缺笔记'
+};
 
 function savedSort(): SortOrder {
   const value = localStorage.getItem(SORT_KEY) as SortOrder;
@@ -37,6 +49,9 @@ export default function Words({ view, initialAdd = false }: Props) {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const groupId = searchParams.get('groupId') || '';
+  const qualityValue = searchParams.get('quality');
+  const quality = QUALITY_FILTERS.includes(qualityValue as QualityFilter) ? qualityValue as QualityFilter : null;
+  const importedAt = searchParams.get('importedAt') || '';
   const words = useLiveQuery(() => db.words.toArray());
   const groups = useLiveQuery(() => db.groups.toArray());
   const [search, setSearch] = useState('');
@@ -56,6 +71,8 @@ export default function Words({ view, initialAdd = false }: Props) {
     const result = (words ?? []).filter(word => {
       if (view === 'starred' && !word.starred) return false;
       if (groupId && word.groupId !== groupId) return false;
+      if (quality && !matchesQualityFilter(word, quality)) return false;
+      if (importedAt && word.createdAt !== importedAt) return false;
       return !query || matchesSearch(word, query);
     });
     if (view === 'recent' || sort === 'recent') result.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || alphabetical(a, b));
@@ -63,13 +80,13 @@ export default function Words({ view, initialAdd = false }: Props) {
     else if (sort === 'za') result.sort((a, b) => alphabetical(b, a));
     else result.sort((a, b) => Number(b.starred) - Number(a.starred) || alphabetical(a, b));
     return result;
-  }, [words, search, sort, view, groupId]);
+  }, [words, search, sort, view, groupId, quality, importedAt]);
 
   const selectedWord = visibleWords.find(word => word.id === selectedId) ?? (!search.trim() && view === 'all' && id ? words?.find(word => word.id === id) : undefined) ?? visibleWords[0];
-  const title = view === 'starred' ? '重点单词' : view === 'recent' ? '最近添加' : '全部单词';
+  const title = importedAt ? '刚导入的单词' : quality ? `数据检查：${QUALITY_LABELS[quality]}` : view === 'starred' ? '重点单词' : view === 'recent' ? '最近添加' : '全部单词';
   const hasNoWords = words?.length === 0;
   const query = search.trim();
-  const emptyTitle = query ? '没有找到相关单词' : view === 'starred' ? '暂无重点单词' : groupId ? '这个分组还没有单词' : hasNoWords ? '你的词书还是空的' : '没有单词';
+  const emptyTitle = query ? '没有找到相关单词' : importedAt ? '没有找到刚导入的单词' : quality ? `没有${QUALITY_LABELS[quality]}` : view === 'starred' ? '暂无重点单词' : groupId ? '这个分组还没有单词' : hasNoWords ? '你的词书还是空的' : '没有单词';
   const emptyDescription = query ? '试试其他关键词，或直接添加这个单词。' : view === 'starred' ? '点击单词旁的星标，就能在这里快速找到它。' : hasNoWords ? '添加遇到的单词，逐渐建立属于自己的词书。' : '添加自己的词汇，或导入已有词表。';
 
   const openAdd = (prefill = '') => { setAddPrefill(prefill); setEditor('new'); };
@@ -160,7 +177,7 @@ export default function Words({ view, initialAdd = false }: Props) {
           <button type="button" className="book-button book-button-primary book-add-button" onClick={() => openAdd()}><Plus size={19} />添加单词</button>
         </div>
       </div>
-      {groups.length > 0 ? <div className="book-filter-line"><label>分组 <select value={groupId} onChange={event => chooseGroup(event.target.value)}><option value="">全部分组</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><button type="button" className="book-text-button" onClick={() => navigate('/words/import')}><Upload size={16} />导入词汇</button></div> : null}
+      {groups.length > 0 || quality || importedAt ? <div className="book-filter-line"><label>分组 <select value={groupId} onChange={event => chooseGroup(event.target.value)}><option value="">全部分组</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><div className="book-filter-actions">{quality || importedAt ? <button type="button" className="book-text-button" onClick={() => navigate('/words')}>清除当前筛选</button> : null}<button type="button" className="book-text-button" onClick={() => navigate('/words/import')}><Upload size={16} />导入词汇</button></div></div> : null}
       {visibleWords.length > 0 ? <div className="book-list" role="list">
         <div className="book-list-head"><span>★</span><span>单词</span><span>中文意思</span><span>添加时间</span></div>
         {visibleWords.map(word => <div className={`book-word-row ${selectedWord?.id === word.id ? 'selected' : ''}`} key={word.id} role="listitem">

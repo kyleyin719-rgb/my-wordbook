@@ -4,6 +4,7 @@ import { Import as ImportIcon, Sparkles, Copy, CheckCircle2, AlertCircle, Info, 
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import { normalizeWordRecord } from '../lib/wordData';
+import CsvImport from '../components/CsvImport';
 
 type ParsedWord = {
   english: string;
@@ -162,6 +163,10 @@ english word = 中文释义
           <p>粘贴词表，预览后导入。</p>
         </div>
       </header>
+
+      <CsvImport />
+
+      <div className="import-section-divider"><span>或继续使用文本格式</span></div>
 
       <section className="import-workspace">
         <div className="import-label">
